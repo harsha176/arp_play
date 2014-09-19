@@ -1,0 +1,9 @@
+This program configures virtual network interface based on vic.conf.
+
+Dependencies
+-------------
+
+1. If trying to run on Ubuntu, execute below commands in shell
+   sudo apt-get install python-pip
+   sudo apt-get install python-dev
+   sudo pip install python-pytun
