@@ -11,6 +11,9 @@ import logging
 import logging.config 
 from scapy.all import *
 import select
+import binascii
+
+from util import *
 
 from pytun import TunTapDevice, IFF_TAP
 
@@ -23,8 +26,24 @@ logging.config.fileConfig(logFile)
 log = logging.getLogger('VNet')
 
 
+# Writes frame over the tap
+def write_frame(tap, frame):
+	# Append first 4 bytes to a frame
+	tap.write("\x00\x00\x00\x00" + str(frame))
+
+# Reads frame over the tap
+def read_frame(tap):
+	# Ignore first 4 bytes of a packet
+	return Ether(tap.read(1526)[4:])
+
+# Handles IPv6 packets
+def handle_ipv6(packet, tap):
+	log.info("Ignoring IPv6 packet")
+
 # This function handles arp packets for all tap drivers on the host.
 def handle_arp(packet, tap):
+	log.info("Received ARP request packet: ")
+
 	arp_reply = packet
 	arp_reply[ARP].op = 2
 	arp_reply[ARP].hwsrc = "bb:bb:bb:bb:bb:bb"
@@ -33,8 +52,29 @@ def handle_arp(packet, tap):
 
 	# write the response on tap interface
 	log.info("Sending ARP reply to " + str(packet[ARP].psrc))
-	tap.write("\x00\x00\x00\x00" + str(arp_reply))
+	write_frame(tap, arp_reply)
 	
+
+# Tunnel packets over other end point
+def tunnel_packets(packet, tap):
+	log.info("Tunneling packet over UDP on {0}: {1}".format(str(tap.addr), str(packet.summary())))
+	
+	# get other end UDP endpoint and send packets over there.
+
+# Handle all packets over the vics
+def handle_packets(taps):
+	rrlist, wrlist, erlist = select.select(taps, [], [])
+
+	# Log the contents which ever tap device is ready.
+	for tap in rrlist:
+		packet = read_frame(tap)
+		# If it is an ARP request then send ARP reply
+		if packet.haslayer(IPv6):
+			handle_ipv6(packet, tap)
+		elif packet.haslayer(ARP) and packet[ARP].op == 1:
+			handle_arp(packet, tap)
+		else:
+			tunnel_packets(packet, tap)
 
 # Initializes VIC based on vic config
 def initialize_vic():
@@ -56,38 +96,22 @@ def initialize_vic():
 		
 		# Create virtual interface
 		tap = TunTapDevice(name="vic-"+str(vic_id), flags=IFF_TAP)
+		tap.hwaddr = '\x00\x11\x22\x33\x44\x55'
 		tap.addr = ip
-		#tap.mtu = 1500
+		tap.mtu = 1500
 		tap.up()
-		log.info("Tap device {0} is up".format("vic-"+str(vic_id)))
+		log.info("Tap device {0} is up with mac: {1}".format("vic-"+str(vic_id), binascii.hexlify(tap.hwaddr)))
 
 		taps[ip] = tap
 		
 	
-	log.info("Waiting for packets on vics...")
-	rlist = []
+	tap_list = []
 	for ip in taps.keys():
-		rlist.append(taps[ip])
+		tap_list.append(taps[ip])
 
+	log.info("Waiting for packets on vics...")
 	while True:
-		try:
-			rrlist, wrlist, erlist = select.select(rlist, [], [])
-
-			# Log the contents which ever tap device is ready.
-			for tap in rrlist:
-				packet = Ether(tap.read(1526)[4:])
-				# If it is an ARP request then send ARP reply
-				if packet.haslayer(IPv6):
-					log.info("Ignoring IPv6 packet")
-				elif packet.haslayer(ARP) and packet[ARP].op == 1:
-					log.info("Received ARP request packet: ")
-					handle_arp(packet, tap)
-				else:
-					log.info("Tunneling packet over UDP on {0}: {1}".format(str(tap.addr), str(packet.summary())))
-		except Exception, e:
-			log.error("Encountered error: " + e.message)
-			break
-		
+		handle_packets(tap_list)	
 
 if __name__ == '__main__':
-	initialize_vic()
+		initialize_vic()
