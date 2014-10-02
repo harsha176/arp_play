@@ -114,4 +114,4 @@ def initialize_vic():
 		handle_packets(tap_list)	
 
 if __name__ == '__main__':
-		initialize_vic()
+	initialize_vic()
