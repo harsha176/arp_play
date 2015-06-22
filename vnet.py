@@ -44,18 +44,15 @@ def handle_ipv6(packet, tap):
 def handle_arp(packet, tap):
 	log.info("Received ARP request packet: ")
 
-	arp_reply = packet
+	arp_reply = packet.copy()
 	arp_reply[ARP].op = 2
 	arp_reply[ARP].hwsrc = "bb:bb:bb:bb:bb:bb"
-	#arp_reply[ARP].hwsrc = '\x00\x11\x22\x33\x44\x55'
-	arp_reply[ARP].psrc =  "172.24.2.10" #packet[ARP].pdst
-	arp_reply[ARP].pdst = "172.24.2.1"
+	arp_reply[ARP].psrc =  packet[ARP].pdst
+	arp_reply[ARP].pdst =  packet[ARP].psrc
 	arp_reply[ARP].hwdst = '\x00\x11\x22\x33\x44\x55'
 
 	arp_reply[Ether].dst = '\x00\x11\x22\x33\x44\x55'
 	arp_reply[Ether].src = "bb:bb:bb:bb:bb:bb"
-        arp_reply[ARP].payload = '\x00'*18
-	#arp_reply[Ether].dst = packet[ARP].hwsrc
 
 	# write the response on tap interface
 	log.info("Sending ARP reply " + "to " + str(packet[ARP].psrc))
