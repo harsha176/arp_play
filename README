@@ -7,4 +7,5 @@ Dependencies
    sudo apt-get install python-pip
    sudo apt-get install python-dev
    sudo pip install python-pytun
-   sudo pip install yaml
+   sudo apt-get install python-yaml
+   sudo pip install pyyaml
